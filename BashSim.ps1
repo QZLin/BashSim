@@ -6,10 +6,10 @@ Set-PSReadLineKeyHandler -Chord "Ctrl+b" -Function BackwardChar
 Set-PSReadLineKeyHandler -Chord "Alt+d" -Function DeleteWord
 Set-PSReadLineKeyHandler -Chord "Alt+b" -Function BackwardWord
 
-Update-TypeData -AppendPath $PSScriptRoot\man_types.format.ps1xml
-Function get_child_item_size { Get-ChildItem | Format-Table -Property Mode, FileSize, Name }
-Set-Alias -Name ll -Value get_child_item_size
-Function get_all_child_item ($path) { (Get-ChildItem -Hidden $path) + (Get-ChildItem $path) }
+# Update-TypeData -AppendPath $PSScriptRoot\man_types.format.ps1xml
+# Function get_child_item_size { Get-ChildItem | Format-Table -Property Mode, FileSize, Name }
+# Set-Alias -Name ll -Value get_child_item_size
+Function get_all_child_item ($path) { @(Get-ChildItem -Hidden $path) + @(Get-ChildItem $path) }
 Set-Alias -Name la -Value get_all_child_item
 
 Set-Alias -Name touch -Value New-Item
@@ -17,9 +17,9 @@ Set-Alias -Name ifconfig -Value ipconfig.exe
 Set-Alias -Name ip -Value ipconfig.exe
 
 $SEP = [IO.Path]::DirectorySeparatorChar
-function p_u2w($path) {
+<# function p_u2w($path) {
     return $path -replace '/', $SEP
-}
+} #>
 
 # Simlate to gnu ln
 # https://www.gnu.org/software/coreutils/manual/html_node/ln-invocation.html
@@ -92,47 +92,49 @@ function ln {
         Target  Specifies the path (relative or absolute) that the new link refers to. #>
 
     # Valid/Preprocess/Generate Target/Name
-    if ($Target) { $PointAt = p_u2w($Target) ; $path = $Target }
-    if ($Name) { $LinkName = p_u2w($Name) }
+    if ($Target) { $PointAt = $Target }
     else {
-        $LinkName = $Target.Substring($Target.LastIndexOf($SEP) + 1)
+        Write-Error "Argument Target is required"
+        return
     }
+    $LinkName = $null -ne $Name ? $Name : $Target.Substring($Target.LastIndexOf($SEP) + 1)
+
 
     if (Test-Path $Target) {
         $FileObject = Get-Item $Target
         $IsDir = $FileObject -is [System.IO.DirectoryInfo] #$object.PSIsContainer
     }
     else {
+        $FileObject = $null
         Write-Warning "Target:$Target not exists"
     }
 
-    #
-    if (!$relative) {}
-    elseif (-not $FileObject) {
-        Write-Error "File $Target not exists, unable to resolve relative path"
+
+    $o_arg_target = $PointAt
+    if ($relative) {
+        if ($FileObject) {
+            $o_arg_target = Resolve-Path $Target -Relative 
+            Write-Debug "Resolved relative: $o_arg_target"
+        }
+        else {
+            Write-Error "Target:$Target not exists, unable to resolve relative path"
+        }
     }
-    else { 
-        $path = Resolve-Path $Target -Relative 
-        Write-Debug "Resolved relative: $path"
-        if (${target-directory}) { $PointAt = "${target-directory}$SEP$path" }
-        else { $PointAt = $path }
-    }
+
+    if (${target-directory}) { $o_arg_link_loc = "${target-directory}$SEP$LinkName" }
+    else { $o_arg_link_loc = $LinkName }
 
     # Powershell wrapper
-    $type = 'SymbolicLink'
+    $o_arg_type = 'SymbolicLink'
     if ($IsDir -or $directory) {
-        $type = $symbolic ? 'Junction' : 'SymbolicLink'
-    }
-    elseif (!$symbolic) {
-        $type = 'HardLink'
+        $o_arg_type = $symbolic ? 'Junction' : 'SymbolicLink'
     }
 
-    # Handle Link Location
-    $LinkNameExist = Test-Path $Name
-    if ($LinkNameExist -and $backup) {
-        Move-Item $Name $Name.FullName + $suffix
+    # Check target path
+    if (Test-Path $o_arg_link_loc -and $backup) {
+        Move-Item $o_arg_link_loc ($o_arg_link_loc.FullName + $suffix)
     }
-    New-Item -ItemType $type -Target $PointAt -Path $LinkName -Force:$Force -Confirm:$interactive
+    New-Item -ItemType $o_arg_type -Target $o_arg_target -Path $o_arg_link_loc -Force:$force -Confirm:$interactive
     <# mklink wrapper
     # Modes
     [System.Collections.Generic.HashSet[string]]$Modes = @()
@@ -145,8 +147,8 @@ function ln {
     Write-Verbose "[Mode of mklink]: $Modes"
 
     # Handle Link Location
-    $LinkNameExist = Test-Path $Name
-    if (!$LinkNameExist) {}
+    $LinkLocExisted = Test-Path $Name
+    if (!$LinkLocExisted) {}
     else {
         if ($backup) { Move-Item $Name $Name.FullName + $suffix }
         elseif ($force) { Remove-Item $Name -Force:$Force -Confirm:$Interactive } 
