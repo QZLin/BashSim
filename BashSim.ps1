@@ -1,27 +1,23 @@
-if (-not (Get-Module PSReadLine)) {
-    Import-Module PSReadLine
-}
+if (!(Get-Module PSReadLine)) { Import-Module PSReadLine }
 
 Set-PSReadLineKeyHandler -Chord "Ctrl+u" -Function BackwardDeleteLine
 Set-PSReadLineKeyHandler -Chord "Ctrl+k" -Function ForwardDeleteLine
+
 Set-PSReadLineKeyHandler -Chord "Ctrl+b" -Function BackwardChar
-Set-PSReadLineKeyHandler -Chord "Alt+d" -Function DeleteWord
+Set-PSReadLineKeyHandler -Chord "Ctrl+e" -Function EndOfLine
 Set-PSReadLineKeyHandler -Chord "Alt+b" -Function BackwardWord
 
-# Update-TypeData -AppendPath $PSScriptRoot\man_types.format.ps1xml
-# Function get_child_item_size { Get-ChildItem | Format-Table -Property Mode, FileSize, Name }
-# Set-Alias -Name ll -Value get_child_item_size
+Set-PSReadLineKeyHandler -Chord "Alt+d" -Function DeleteWord
+
 Function get_all_child_item ($path) { @(Get-ChildItem -Hidden $path) + @(Get-ChildItem $path) }
 Set-Alias -Name la -Value get_all_child_item
+Set-Alias -Name ll -Value Get-ChildItem
 
 Set-Alias -Name touch -Value New-Item
 Set-Alias -Name ifconfig -Value ipconfig.exe
 Set-Alias -Name ip -Value ipconfig.exe
 
 $SEP = [IO.Path]::DirectorySeparatorChar
-<# function p_u2w($path) {
-    return $path -replace '/', $SEP
-} #>
 
 # Simlate to gnu ln
 # https://www.gnu.org/software/coreutils/manual/html_node/ln-invocation.html
@@ -33,9 +29,11 @@ function ln {
         ln [option]… target… directory
         ln [option]… -t directory target… #>
         [Parameter(Mandatory = $true, Position = 0)]
-        [string]$Target, # PointAt
+        # PointAt
+        [string]$Target, 
         [Parameter(Position = 1)]
-        [string]$Name, # LinkName
+        # LinkName
+        [string]$Name, 
         <# Mandatory arguments to long options are mandatory for short options too.
             --backup[=CONTROL]      make a backup of each existing destination file
         -b                          like --backup but does not accept an argument
@@ -69,6 +67,8 @@ function ln {
         [switch]$logical, #TODO
         [Alias("n")]
         [switch]${no-dereference}, #TODO
+        [Alias("P")]
+        [switch]$physical, #TODO
         
         [Alias("r")]
         [switch]$relative,
@@ -81,8 +81,9 @@ function ln {
         [Alias("t")]
         [string]${target-directory},
         [Alias("t_")]
-        [switch]${no-target-directory},
-        [switch]$help #TODO
+        [switch]${no-target-directory}, #TODO
+        [switch]$help, #TODO
+        [switch]$version #TODO
     )
 
     <# Creates a symbolic link.
@@ -151,34 +152,8 @@ function ln {
         Move-Item $o_arg_link_loc $new_loc
     }
     New-Item -ItemType $o_arg_type -Target $o_arg_target -Path $o_arg_link_loc -Force:$force -Confirm:$interactive
-    <# mklink wrapper
-    # Modes
-    [System.Collections.Generic.HashSet[string]]$Modes = @()
-    if ($IsDir -or $directory) {
-        $Modes.Add(!$symbolic ? "/J" : "/D") > $null
-    }
-    elseif (!$symbolic) {
-        $Modes.Add("/H")
-    }
-    Write-Verbose "[Mode of mklink]: $Modes"
-
-    # Handle Link Location
-    $LinkLocExisted = Test-Path $Name
-    if (!$LinkLocExisted) {}
-    else {
-        if ($backup) { Move-Item $Name $Name.FullName + $suffix }
-        elseif ($force) { Remove-Item $Name -Force:$Force -Confirm:$Interactive } 
-        else { Write-Error "$Name already existed, unable to create link"; return }
-    }
-
-    Write-Verbose "cmd /c mklink $(Join-String -InputObject $Modes -Separator ' ') $Name $path"
-    $arguments = ("/c", "mklink") + $Modes + ($Name, $path)
-    Write-Verbose "$arguments"
-    Start-Process -FilePath cmd -ArgumentList $arguments `
-        -NoNewWindow -WorkingDirectory (Get-Location) -Wait #>
+    
 }
-
-# Update-FormatData -PrependPath $Env:USERPROFILE\Documents\PowerShell\man_format.format.ps1xml
 
 function Get-DirectorySize() {
     [CmdletBinding()]
@@ -186,6 +161,7 @@ function Get-DirectorySize() {
     param (
         [string]$directory = ".",
         [switch]$NoRecurse,
+        [Parameter(Mandatory = $false)]
         [bool]$HumanReadAble = $true
     )
     $DirObj = Get-Item $directory
@@ -193,11 +169,16 @@ function Get-DirectorySize() {
     Get-ChildItem $DirObj -Recurse:(!$NoRecurse) |
     Measure-Object -Sum Length |
     Select-Object `
-    @{Name         = ”Path”
-        Expression = { $DirObj }
-    }, @{Name      = ”Files”
-        Expression = { $_.Count }
-    }, @{Name      = ”Size”
-        Expression = { $HumanReadAble ? $_.Sum / 1000000 : $_.Sum }
+    @{
+        Name       = ”Path”
+        Expression = { $DirObj } 
+    },
+    @{
+        Name       = ”Files”
+        Expression = { $_.Count } 
+    },
+    @{
+        Name       = ”Size”
+        Expression = { $HumanReadAble ? $_.Sum / 1000000 : $_.Sum } 
     }
 }
