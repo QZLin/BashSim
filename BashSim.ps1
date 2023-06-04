@@ -1,4 +1,6 @@
-Import-Module PSReadLine
+if (-not (Get-Module PSReadLine)) {
+    Import-Module PSReadLine
+}
 
 Set-PSReadLineKeyHandler -Chord "Ctrl+u" -Function BackwardDeleteLine
 Set-PSReadLineKeyHandler -Chord "Ctrl+k" -Function ForwardDeleteLine
@@ -97,7 +99,16 @@ function ln {
         Write-Error "Argument Target is required"
         return
     }
-    $LinkName = $null -ne $Name ? $Name : $Target.Substring($Target.LastIndexOf($SEP) + 1)
+    if ($Name.Length -eq 0) {
+        if ($Target -match '^([^\\/]+)$') {
+            $LinkName = $Matches[1]
+        }
+        elseif ($Target -match '^.*[\\/](.+?)$') {
+            $LinkName = $Matches[1]
+        }
+
+    }
+    else { $LinkName = $Name }
 
 
     if (Test-Path $Target) {
@@ -131,8 +142,13 @@ function ln {
     }
 
     # Check target path
-    if (Test-Path $o_arg_link_loc -and $backup) {
-        Move-Item $o_arg_link_loc ($o_arg_link_loc.FullName + $suffix)
+    if ((Test-Path $o_arg_link_loc) -and $backup) {
+        $new_loc = $o_arg_link_loc
+        while ($true) {
+            $new_loc += $suffix
+            if (-not (Test-Path $new_loc)) { break }
+        }
+        Move-Item $o_arg_link_loc $new_loc
     }
     New-Item -ItemType $o_arg_type -Target $o_arg_target -Path $o_arg_link_loc -Force:$force -Confirm:$interactive
     <# mklink wrapper
